@@ -23,7 +23,7 @@ Har bir band kodda joyi va tekshiruvchi test bilan ko‘rsatilgan.
 | Fayl yuklash | Haqiqiy tarkib (magic bytes, `file-type`), kengaytma-tarkib mosligi, hajm limiti (`MAX_UPLOAD_MB`), SVG/HTML/EXE rad etiladi, rasmlar `sharp` bilan qayta kodlanadi (EXIF olib tashlanadi), tasodifiy server nomi, foydalanuvchi nomi yo‘l sifatida ishlatilmaydi, hujjatlar statik katalogdan tashqarida va faqat nashr tekshiruvi bilan beriladi | `documents.test.ts`, `news.test.ts` |
 | HTTPS | `FORCE_HTTPS` (308 yo‘naltirish, `TRUST_PROXY` bilan), HSTS, production’da `PUBLIC_URL=https` va `COOKIE_SECURE=true` majburiy | `security.test.ts` |
 | CORS | Faqat `CORS_ORIGINS` ro‘yxati; bo‘sh bo‘lsa cross-origin yo‘q | `security.test.ts` |
-| Headerlar | Helmet: CSP, nosniff, frame-ancestors none, referrer-policy, COOP/CORP | `security.test.ts` |
+| Headerlar | Helmet: CSP, nosniff, frame-ancestors none, referrer-policy, COOP/CORP. `frame-src` faqat `youtube-nocookie.com` va `player.vimeo.com` (videogalereya) | `security.test.ts`, e2e (CSP buzilishi yo‘qligi) |
 | Loglar | `pino` + redaksiya (cookie, parol, token); audit `meta`ga maxfiy ma’lumot yozilmaydi | `auth.test.ts` |
 | Sirlar | `.env` Git’da yo‘q; standart parol yo‘q; administrator CLI orqali | — |
 | Audit | Barcha o‘zgartirishlar, login/logout/muvaffaqiyatsiz kirish | `site.test.ts` |
@@ -36,4 +36,4 @@ Har bir band kodda joyi va tekshiruvchi test bilan ko‘rsatilgan.
 - Login rate limit **xotirada** — bir nechta server nusxasida har biri alohida hisoblaydi (Redis store tavsiya).
 - Reverse proxy’da `TRUST_PROXY` to‘g‘ri qo‘yilmasa, IP bo‘yicha limit proxy IP’iga qo‘llanadi.
 - 2FA yo‘q. Administrator parolini kuchli saqlang, `ENABLE_API_DOCS` productionda o‘chiq tursin.
-- Bog‘liqliklarni muntazam `npm audit` bilan tekshiring.
+- Bog‘liqliklarni muntazam `npm audit` bilan tekshiring. Holat: `npm audit --omit=dev` — 0 zaiflik. `prisma` CLI ichidagi `deepmerge-ts` `package.json` → `overrides` orqali 8.x ga ko‘tarilgan (Prisma 7 ga o‘tmasdan). To‘liq `npm audit` faqat test vositasi `vitest/tinypool` dagi zaifliklarni ko‘rsatadi (serverga tushmaydi; vitest 5 ga o‘tish katta o‘zgarish).

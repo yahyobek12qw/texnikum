@@ -10,12 +10,18 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
     volumes:
       - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portal -d uchkoprik"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     # Portlar tashqariga ochilmaydi: faqat app konteyneri ulanadi
   app:
     build: .
     restart: unless-stopped
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://portal:${DB_PASSWORD}@db:5432/uchkoprik?schema=public
       PUBLIC_URL: ${PUBLIC_URL:?PUBLIC_URL (https://...) ni belgilang}

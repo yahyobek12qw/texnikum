@@ -1,0 +1,32 @@
+# SINALMAGAN: bu muhitda Docker mavjud emas edi. Ishlatishdan oldin parollar va domenni o'zgartiring.
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: portal
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD ni belgilang}
+      POSTGRES_DB: uchkoprik
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    # Portlar tashqariga ochilmaydi: faqat app konteyneri ulanadi
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://portal:${DB_PASSWORD}@db:5432/uchkoprik?schema=public
+      PUBLIC_URL: ${PUBLIC_URL:?PUBLIC_URL (https://...) ni belgilang}
+      COOKIE_SECURE: "true"
+      FORCE_HTTPS: "true"
+      TRUST_PROXY: "1"
+      ENABLE_API_DOCS: "false"
+    ports:
+      - "127.0.0.1:4000:4000"   # TLS ni reverse proxy (Nginx/Caddy) tugatadi
+    volumes:
+      - uploads:/data/uploads
+volumes:
+  dbdata:
+  uploads:

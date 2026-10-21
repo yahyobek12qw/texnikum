@@ -1,0 +1,588 @@
+// Uchko'prik 1-sonli texnikumi portali — ma'lumotlar modeli (PostgreSQL)
+// Tarjimalar alohida *_translations jadvallarida saqlanadi; (entity_id, locale) takrorlanmas.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PUBLISHER
+  EDITOR
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Locale {
+  uz
+  ru
+  en
+}
+
+enum PageTemplate {
+  DEFAULT
+  SECTION
+  DOCUMENTS
+  STAFF
+  PROGRAMS
+}
+
+enum NewsType {
+  NEWS
+  ANNOUNCEMENT
+  EVENT
+}
+
+enum DocumentType {
+  REGULATION
+  CHARTER
+  PLAN
+  REPORT
+  OPEN_DATA
+  ANTICORRUPTION
+  ADMISSION
+  OTHER
+}
+
+enum VideoProvider {
+  YOUTUBE
+  VIMEO
+  UPLOAD
+}
+
+enum MediaKind {
+  IMAGE
+  DOCUMENT
+  VIDEO
+}
+
+enum StaffKind {
+  LEADERSHIP
+  TEACHER
+  STAFF
+}
+
+enum NavItemKind {
+  PAGE
+  ROUTE
+  EXTERNAL
+}
+
+enum CategoryScope {
+  NEWS
+  DOCUMENT
+}
+
+// ───────────── Foydalanuvchilar va sessiyalar ─────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(ADMIN)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions  Session[]
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+// id — sessiya tokenining SHA-256 xeshi (token o'zi bazada saqlanmaydi)
+model Session {
+  id         String   @id
+  userId     String
+  csrfToken  String
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ───────────── Sahifalar ─────────────
+
+model Page {
+  id          String        @id @default(cuid())
+  parentId    String?
+  template    PageTemplate  @default(DEFAULT)
+  options     Json?
+  /// Sahifa qaysi funksiya moduliga tegishli (modul o'chirilsa, sahifa saytda yashiriladi)
+  module      String?
+  status      ContentStatus @default(DRAFT)
+  sortOrder   Int           @default(0)
+  publishedAt DateTime?
+  createdById String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  parent       Page?             @relation("PageTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children     Page[]            @relation("PageTree")
+  translations PageTranslation[]
+  versions     PageVersion[]
+  navItems     NavigationItem[]
+
+  @@index([parentId])
+  @@index([status, sortOrder])
+  @@map("pages")
+}
+
+model PageTranslation {
+  id             String   @id @default(cuid())
+  pageId         String
+  locale         Locale
+  title          String
+  slug           String
+  content        String   @default("")
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, locale])
+  @@unique([locale, slug])
+  @@map("page_translations")
+}
+
+model PageVersion {
+  id          String   @id @default(cuid())
+  pageId      String
+  version     Int
+  snapshot    Json
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, version])
+  @@map("page_versions")
+}
+
+// ───────────── Yangiliklar, e'lonlar, tadbirlar ─────────────
+
+model News {
+  id           String        @id @default(cuid())
+  type         NewsType      @default(NEWS)
+  status       ContentStatus @default(DRAFT)
+  categoryId   String?
+  coverMediaId String?
+  isImportant  Boolean       @default(false)
+  publishedAt  DateTime?
+  scheduledAt  DateTime?
+  eventAt      DateTime?
+  createdById  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  category     Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  coverMedia   Media?            @relation("NewsCover", fields: [coverMediaId], references: [id], onDelete: SetNull)
+  translations NewsTranslation[]
+
+  @@index([status, publishedAt])
+  @@index([type, status])
+  @@index([scheduledAt])
+  @@index([categoryId])
+  @@map("news")
+}
+
+model NewsTranslation {
+  id             String   @id @default(cuid())
+  newsId         String
+  locale         Locale
+  title          String
+  slug           String
+  excerpt        String   @default("")
+  content        String   @default("")
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  @@unique([newsId, locale])
+  @@unique([locale, slug])
+  @@map("news_translations")
+}
+
+// ───────────── Kategoriyalar ─────────────
+
+model Category {
+  id        String        @id @default(cuid())
+  scope     CategoryScope
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  translations CategoryTranslation[]
+  news         News[]
+  documents    Document[]
+
+  @@index([scope])
+  @@map("categories")
+}
+
+model CategoryTranslation {
+  id         String @id @default(cuid())
+  categoryId String
+  locale     Locale
+  name       String
+  slug       String
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, locale])
+  @@unique([locale, slug])
+  @@map("category_translations")
+}
+
+// ───────────── Hujjatlar ─────────────
+
+model Document {
+  id          String        @id @default(cuid())
+  type        DocumentType  @default(OTHER)
+  status      ContentStatus @default(DRAFT)
+  categoryId  String?
+  fileMediaId String
+  docDate     DateTime?
+  number      String?
+  publishedAt DateTime?
+  createdById String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  category     Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  fileMedia    Media                 @relation("DocumentFile", fields: [fileMediaId], references: [id], onDelete: Restrict)
+  translations DocumentTranslation[]
+
+  @@index([status, docDate])
+  @@index([type, status])
+  @@map("documents")
+}
+
+model DocumentTranslation {
+  id          String @id @default(cuid())
+  documentId  String
+  locale      Locale
+  title       String
+  description String @default("")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, locale])
+  @@map("document_translations")
+}
+
+// ───────────── Media ─────────────
+
+model Media {
+  id            String    @id @default(cuid())
+  kind          MediaKind
+  originalName  String
+  storedName    String    @unique
+  mimeType      String
+  size          Int
+  width         Int?
+  height        Int?
+  sha256        String
+  hasThumb      Boolean   @default(false)
+  showInGallery Boolean   @default(false)
+  uploadedById  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  translations MediaTranslation[]
+  coverOfNews  News[]             @relation("NewsCover")
+  videoThumbs  GalleryVideo[]     @relation("VideoThumb")
+  videoFiles   GalleryVideo[]     @relation("VideoFile")
+  alumniPhotos Alumnus[]          @relation("AlumnusPhoto")
+  partnerLogos Partner[]          @relation("PartnerLogo")
+  documents    Document[]         @relation("DocumentFile")
+  staffPhotos  Staff[]            @relation("StaffPhoto")
+
+  @@index([kind, createdAt])
+  @@map("media")
+}
+
+model MediaTranslation {
+  id      String @id @default(cuid())
+  mediaId String
+  locale  Locale
+  alt     String @default("")
+  caption String @default("")
+
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([mediaId, locale])
+  @@map("media_translations")
+}
+
+// ───────────── Navigatsiya ─────────────
+
+model NavigationMenu {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  updatedAt DateTime @updatedAt
+
+  items NavigationItem[]
+
+  @@map("navigation_menus")
+}
+
+model NavigationItem {
+  id        String      @id @default(cuid())
+  menuId    String
+  parentId  String?
+  sortOrder Int         @default(0)
+  kind      NavItemKind
+  pageId    String?
+  route     String?
+  url       String?
+  newTab    Boolean     @default(false)
+
+  menu         NavigationMenu              @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parent       NavigationItem?             @relation("NavTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children     NavigationItem[]            @relation("NavTree")
+  page         Page?                       @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  translations NavigationItemTranslation[]
+
+  @@index([menuId, parentId, sortOrder])
+  @@map("navigation_items")
+}
+
+model NavigationItemTranslation {
+  id     String @id @default(cuid())
+  itemId String
+  locale Locale
+  label  String
+
+  item NavigationItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, locale])
+  @@map("navigation_item_translations")
+}
+
+// ───────────── Ta'lim yo'nalishlari ─────────────
+
+model EducationProgram {
+  id          String        @id @default(cuid())
+  code        String?
+  status      ContentStatus @default(DRAFT)
+  sortOrder   Int           @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  translations EducationProgramTranslation[]
+
+  @@index([status, sortOrder])
+  @@map("education_programs")
+}
+
+model EducationProgramTranslation {
+  id            String @id @default(cuid())
+  programId     String
+  locale        Locale
+  title         String
+  summary       String @default("")
+  description   String @default("")
+  duration      String @default("")
+  qualification String @default("")
+
+  program EducationProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, locale])
+  @@map("education_program_translations")
+}
+
+// ───────────── Rahbariyat va xodimlar ─────────────
+
+model Staff {
+  id           String        @id @default(cuid())
+  kind         StaffKind     @default(STAFF)
+  status       ContentStatus @default(DRAFT)
+  photoMediaId String?
+  email        String?
+  phone        String?
+  sortOrder    Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  photoMedia   Media?             @relation("StaffPhoto", fields: [photoMediaId], references: [id], onDelete: SetNull)
+  translations StaffTranslation[]
+
+  @@index([kind, status, sortOrder])
+  @@map("staff")
+}
+
+model StaffTranslation {
+  id       String @id @default(cuid())
+  staffId  String
+  locale   Locale
+  fullName String
+  position String @default("")
+  bio      String @default("")
+
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, locale])
+  @@map("staff_translations")
+}
+
+// ───────────── Videogalereya, bitiruvchilar, hamkorlar ─────────────
+
+model GalleryVideo {
+  id           String        @id @default(cuid())
+  provider     VideoProvider
+  externalId   String
+  sourceUrl    String
+  thumbMediaId String?
+  fileMediaId  String?
+  status       ContentStatus @default(DRAFT)
+  sortOrder    Int           @default(0)
+  publishedAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  thumbMedia   Media?                   @relation("VideoThumb", fields: [thumbMediaId], references: [id], onDelete: SetNull)
+  fileMedia    Media?                   @relation("VideoFile", fields: [fileMediaId], references: [id], onDelete: Restrict)
+  translations GalleryVideoTranslation[]
+
+  @@index([status, sortOrder])
+  @@map("gallery_videos")
+}
+
+model GalleryVideoTranslation {
+  id          String @id @default(cuid())
+  videoId     String
+  locale      Locale
+  title       String
+  description String @default("")
+
+  video GalleryVideo @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, locale])
+  @@map("gallery_video_translations")
+}
+
+model Alumnus {
+  id             String        @id @default(cuid())
+  graduationYear Int?
+  photoMediaId   String?
+  status         ContentStatus @default(DRAFT)
+  sortOrder      Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  photoMedia   Media?                @relation("AlumnusPhoto", fields: [photoMediaId], references: [id], onDelete: SetNull)
+  translations AlumnusTranslation[]
+
+  @@index([status, graduationYear])
+  @@map("alumni")
+}
+
+model AlumnusTranslation {
+  id        String @id @default(cuid())
+  alumnusId String
+  locale    Locale
+  fullName  String
+  program   String @default("")
+  workplace String @default("")
+  story     String @default("")
+
+  alumnus Alumnus @relation(fields: [alumnusId], references: [id], onDelete: Cascade)
+
+  @@unique([alumnusId, locale])
+  @@map("alumni_translations")
+}
+
+model Partner {
+  id          String        @id @default(cuid())
+  websiteUrl  String?
+  logoMediaId String?
+  status      ContentStatus @default(DRAFT)
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  logoMedia    Media?               @relation("PartnerLogo", fields: [logoMediaId], references: [id], onDelete: SetNull)
+  translations PartnerTranslation[]
+
+  @@index([status, sortOrder])
+  @@map("partners")
+}
+
+model PartnerTranslation {
+  id          String @id @default(cuid())
+  partnerId   String
+  locale      Locale
+  name        String
+  description String @default("")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerId, locale])
+  @@map("partner_translations")
+}
+
+/// Kunlik ko'rishlar hisoblagichi: cookie, IP yoki shaxsiy ma'lumot saqlanmaydi (faqat yo'l va son).
+model PageView {
+  day   DateTime @db.Date
+  path  String
+  count Int      @default(0)
+
+  @@id([day, path])
+  @@index([day])
+  @@map("page_views")
+}
+
+// ───────────── Sozlamalar va audit ─────────────
+
+model SiteSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("site_settings")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  userEmail String?
+  action    String
+  entity    String
+  entityId  String?
+  summary   String
+  meta      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+  @@index([userId])
+  @@map("audit_logs")
+}

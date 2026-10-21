@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+**/dist
+.env
+.env.*
+!.env.example
+.pgdata
+.pgdata-test
+.pgdata-e2e
+uploads
+backups
+test-results
+playwright-report
+.git
+*.log

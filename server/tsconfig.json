@@ -1,0 +1,7 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src", "tests", "vitest.config.ts", "tsup.config.ts", "../prisma/seed.ts", "../prisma/seed-demo.ts", "../prisma/demo-assets.ts", "../scripts"]
+}
